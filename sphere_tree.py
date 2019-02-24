@@ -76,7 +76,6 @@ class SphereTree:
             s.parent = self
             self.children.append(s)
         self._sphere = enclosing_sphere([c.sphere for c in self.children])
-        print(self._sphere)
 
     @staticmethod
     def from_list(sphere_list):
@@ -108,6 +107,15 @@ class SphereTree:
                     p_sphere = SphereTree(children=sphere_tree_list)
                     st_grid_2[i,j,k] = p_sphere
         return st_grid_2
+
+    @staticmethod
+    def from_grid(sphere_grid):
+        sgrid = sphere_grid
+        while sgrid.shape[0] > 1:
+            sgrid = SphereTree.decimate_grid(sgrid)
+        return sgrid[0,0,0]
+
+
 
 def construct_sphere_grid(s_per_side, side_length, ndims=3):
     sphere_grade = ndims + 1
@@ -183,6 +191,7 @@ def test_decimate_sphere_grid():
                 gs.add_object(grid[i,j,k].sphere)
     draw(gs, browser_window=True, scale=0.1)
 
+
 def test_create_minimal_sphere_tree():
     sphere_list = construct_sphere_grid(2,4).flatten()
     st = SphereTree.from_list(sphere_list)
@@ -190,11 +199,23 @@ def test_create_minimal_sphere_tree():
     draw([st.sphere], browser_window=True, scale=0.1)
 
 
+def test_from_grid():
+    sphere_grid = construct_sphere_grid(16,4)
+    st = SphereTree.from_grid(sphere_grid)
+    for i in range(100):
+        if not st.isleaf:
+            draw([s.sphere for s in st.children], browser_window=True, scale=0.1)
+            st = st.children[0]
+
+
+
+
 if __name__ == '__main__':
     #test_join_spheres() 
     #test_enclosing_spheres()
     #test_in_sphere()
     #test_construct_sphere_grid()
-    test_decimate_sphere_grid()
+    #test_decimate_sphere_grid()
     #test_create_minimal_sphere_tree()
+    test_from_grid()
 
