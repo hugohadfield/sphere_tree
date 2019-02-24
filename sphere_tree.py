@@ -115,7 +115,18 @@ class SphereTree:
             sgrid = SphereTree.decimate_grid(sgrid)
         return sgrid[0,0,0]
 
+    def intersect_with_line(self, line):
+        if (meet(self.sphere, line)**2)[0] > 0:
+            if self.isleaf:
+                return [self]
+            else:
+                res = [c.intersect_with_line(line) for c in self.children]
+                return [r for r in res if r != []]
+        else:
+            return []
 
+def intersect_sphere_tree_with_line(sphere_tree, line):
+    result = sphere_tree.intersect_with_line(line)
 
 def construct_sphere_grid(s_per_side, side_length, ndims=3):
     sphere_grade = ndims + 1
@@ -208,6 +219,15 @@ def test_from_grid():
             st = st.children[0]
 
 
+def test_intersect_with_line():
+    line = ((up(e2)^up(-e1 + e2))^einf).normal()
+    sphere_grid = construct_sphere_grid(16,4)
+    st = SphereTree.from_grid(sphere_grid)
+    result = st.intersect_with_line(line)
+    print(result)
+
+
+
 
 
 if __name__ == '__main__':
@@ -217,5 +237,6 @@ if __name__ == '__main__':
     #test_construct_sphere_grid()
     #test_decimate_sphere_grid()
     #test_create_minimal_sphere_tree()
-    test_from_grid()
+    #test_from_grid()
+    test_intersect_with_line()
 
