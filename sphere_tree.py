@@ -1,12 +1,15 @@
 import numpy as np
-import os
-os.environ['NUMBA_DISABLE_PARALLEL']='1'
 
 from clifford.g3c import *
 from clifford.tools.g3c import *
 from pyganja import *
 
 root2 = np.sqrt(2)
+
+@numba.njit
+def check_sphere_line_intersect(s,l):
+    mv = meet_val(s, l)
+    return imt_func(mv,mv)[0]
 
 
 def flatten(iterable):
@@ -44,7 +47,6 @@ def join_spheres(S1,S2):
     pp2 = meet(s2,L)(2).normal()
     p1 = point_pair_to_end_points(pp1)[0]
     p2 = point_pair_to_end_points(pp2)[1]
-    P = up(e1)^up(e2)^up(-e2)^einf
     if (p1|(s2*I5))[0] > 0.0:
         opt_sphere = s2(4)
     elif (p2|(s1*I5))[0] > 0.0:
@@ -114,7 +116,7 @@ class SphereTree:
         s_per_side = sphere_grid.shape[0]
         # Sphere tree grid
         if not isinstance(sphere_grid[0,0,0], SphereTree):
-            print('Constructing sphere tree grid')
+            print('Converting sphere grid to sphere tree grid')
             st_grid = np.empty((s_per_side,s_per_side,s_per_side),dtype=np.object)
             for i in range(s_per_side):
                 for j in range(s_per_side):
@@ -122,6 +124,7 @@ class SphereTree:
                         st_grid[i,j,k] = SphereTree(sphere=sphere_grid[i,j,k])
         else:
             st_grid = sphere_grid
+        print('Decimating grid')
         # Start to bin them
         st_grid_2 = np.empty((s_per_side//2,s_per_side//2,s_per_side//2),dtype=np.object)
         for i in range(s_per_side//2):
@@ -140,7 +143,7 @@ class SphereTree:
         return sgrid[0,0,0]
 
     def intersect_with_line(self, line):
-        if (meet(self.sphere, line)**2)[0] > 0:
+        if check_sphere_line_intersect(self.sphere.value, line.value) > 0:
             if self.isleaf:
                 return [self]
             else:
@@ -154,22 +157,27 @@ def intersect_sphere_tree_with_line(sphere_tree, line):
     return result
 
 def construct_sphere_grid(s_per_side, side_length, ndims=3):
+    print('Constructing sphere grid')
     sphere_grade = ndims + 1
     sphere_radius = root2*0.5*side_length/(s_per_side-1)
     vspaces = np.linspace(-side_length/2, side_length/2, s_per_side)
     XX,YY,ZZ = np.meshgrid(*[vspaces for i in range(ndims)])
     centers = np.stack([XX,YY,ZZ],axis=-1)
     sphere_grid = np.empty((s_per_side,s_per_side,s_per_side),dtype=np.object)
+    I_N = layout.pseudoScalar
+    scount = 0
     for i in range(s_per_side):
         for j in range(s_per_side):
+            print(100*scount/(s_per_side**3))
             for k in range(s_per_side):
                 dual_sphere_val = np.zeros(32)
                 dual_sphere_val[1:ndims+1] = centers[i,j,k]
+                dual_sphere_val = val_up(dual_sphere_val)
                 dual_sphere = layout.MultiVector(value=dual_sphere_val)
-                dual_sphere = up(dual_sphere)
                 dual_sphere = dual_sphere - 0.5*sphere_radius**2*layout.einf
-                sphere = dual_sphere.dual()
+                sphere = dual_sphere*I_N
                 sphere_grid[i,j,k] = sphere
+                scount += 1
     return sphere_grid
 
 
@@ -246,7 +254,7 @@ def test_from_grid():
 
 def test_intersect_with_line():
     line = ((up(e2)^up(-e1 + 2*e2+0.3*e3))^einf).normal()
-    sphere_grid = construct_sphere_grid(16,4)
+    sphere_grid = construct_sphere_grid(256,4)
     st = SphereTree.from_grid(sphere_grid)
     print('Intersecting',flush=True)
     result = intersect_sphere_tree_with_line(st, line)
