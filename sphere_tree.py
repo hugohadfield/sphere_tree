@@ -9,6 +9,30 @@ from pyganja import *
 root2 = np.sqrt(2)
 
 
+def flatten(iterable):
+    """ 
+    Flatten an arbitrarily nested list 
+    https://stackoverflow.com/questions/10823877/what-is-the-fastest-way-to-flatten-arbitrarily-nested-lists-in-python
+    """
+    iterator, sentinel, stack = iter(iterable), object(), []
+    while True:
+        value = next(iterator, sentinel)
+        if value is sentinel:
+            if not stack:
+                break
+            iterator = stack.pop()
+        elif isinstance(value, str):
+            yield value
+        else:
+            try:
+                new_iterator = iter(value)
+            except TypeError:
+                yield value
+            else:
+                stack.append(iterator)
+                iterator = new_iterator
+
+
 def join_spheres(S1,S2):
     """ 
     Find the smallest sphere that encloses both spheres
@@ -121,12 +145,13 @@ class SphereTree:
                 return [self]
             else:
                 res = [c.intersect_with_line(line) for c in self.children]
-                return [r for r in res if r != []]
+                return res
         else:
             return []
 
 def intersect_sphere_tree_with_line(sphere_tree, line):
-    result = sphere_tree.intersect_with_line(line)
+    result = list(flatten(sphere_tree.intersect_with_line(line)))
+    return result
 
 def construct_sphere_grid(s_per_side, side_length, ndims=3):
     sphere_grade = ndims + 1
@@ -220,11 +245,13 @@ def test_from_grid():
 
 
 def test_intersect_with_line():
-    line = ((up(e2)^up(-e1 + e2))^einf).normal()
+    line = ((up(e2)^up(-e1 + 2*e2+0.3*e3))^einf).normal()
     sphere_grid = construct_sphere_grid(16,4)
     st = SphereTree.from_grid(sphere_grid)
-    result = st.intersect_with_line(line)
-    print(result)
+    print('Intersecting',flush=True)
+    result = intersect_sphere_tree_with_line(st, line)
+    spheres = [st_node.sphere for st_node in result]
+    draw(spheres+[line], browser_window=True, scale=0.1)
 
 
 
