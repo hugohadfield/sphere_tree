@@ -11,6 +11,9 @@ def check_sphere_line_intersect(s,l):
     mv = meet_val(s, l)
     return imt_func(mv,mv)[0]
 
+def sphere_beyond_plane(sphere, plane):
+    snorm = unsign_sphere(sphere)
+    return (snorm|plane)[0] < -get_radius_from_sphere(snorm)
 
 def flatten(iterable):
     """ 
@@ -69,7 +72,7 @@ def enclosing_sphere(spheres):
 
 
 class SphereTree:
-    def __init__(self, children=[], parent=None, sphere=None):
+    def __init__(self, children=[], parent=None, sphere=None, isdatum=False):
         if len(children) == 0:
             self.children = children
         else:
@@ -77,6 +80,7 @@ class SphereTree:
             self.add_children(children)
         self.parent = parent
         self._sphere = sphere
+        self.isdatum = isdatum
 
     @property
     def sphere(self):
@@ -93,6 +97,10 @@ class SphereTree:
     def isroot(self):
         return (self.parent is None)
     
+    @property
+    def nchildren(self):
+        return len(self.children)
+
     @property
     def isleaf(self):
         return (len(self.children) == 0)
@@ -121,7 +129,7 @@ class SphereTree:
             for i in range(s_per_side):
                 for j in range(s_per_side):
                     for k in range(s_per_side):
-                        st_grid[i,j,k] = SphereTree(sphere=sphere_grid[i,j,k])
+                        st_grid[i,j,k] = SphereTree(sphere=sphere_grid[i,j,k],isdatum=True)
         else:
             st_grid = sphere_grid
         print('Decimating grid')
@@ -142,6 +150,49 @@ class SphereTree:
             sgrid = SphereTree.decimate_grid(sgrid)
         return sgrid[0,0,0]
 
+    def drill(self, line):
+        nchild = self.nchildren
+        i = 0
+        if check_sphere_line_intersect(self.sphere.value, line.value) > 0:
+            while i < nchild:
+                c = self.children[i]
+                if c.isdatum:
+                    if check_sphere_line_intersect(c.sphere.value, line.value) > 0:
+                        del self.children[i]
+                        nchild -= 1
+                    else:
+                        i += 1
+                else:
+                    c.drill(line)
+                    if c.nchildren == 0:
+                        del self.children[i]
+                        nchild -= 1
+                    else:
+                        i += 1
+
+    def slice(self, plane):
+        if sphere_beyond_plane(self.sphere, plane):
+            self.children = []
+        else:
+            i = 0
+            nchild = len(self.children)
+            while i < nchild:
+                c = self.children[i]
+                if not c.isdatum:
+                    c.slice(plane)
+                    if c.nchildren == 0:
+                        del self.children[i]
+                        nchild -= 1
+                    else:
+                        i += 1
+                else:
+                    if sphere_beyond_plane(c.sphere, plane):
+                        del self.children[i]
+                        nchild -= 1
+                    else:
+                        i += 1
+
+
     def intersect_with_line(self, line):
         if check_sphere_line_intersect(self.sphere.value, line.value) > 0:
             if self.isleaf:
@@ -151,6 +202,18 @@ class SphereTree:
                 return res
         else:
             return []
+
+    def add_to_scene(self, scene, datum_only=False):
+        if self.isleaf:
+            if datum_only:
+                if self.isdatum:
+                    scene.add_object(self.sphere)
+            else:
+                scene.add_object(self.sphere)
+        else:
+            for c in self.children:
+                c.add_to_scene(scene, datum_only=datum_only)
+
 
 def intersect_sphere_tree_with_line(sphere_tree, line):
     result = list(flatten(sphere_tree.intersect_with_line(line)))
@@ -262,7 +325,42 @@ def test_intersect_with_line():
     draw(spheres+[line], browser_window=True, scale=0.1)
 
 
+def test_drill():
+    line = ((up(e2)^up(-e1 + 2*e2+0.3*e3))^einf).normal()
+    sphere_grid = construct_sphere_grid(8,4)
+    st = SphereTree.from_grid(sphere_grid)
+    print('Drilling',flush=True)
+    st.drill(line)
+    gs = GanjaScene()
+    st.add_to_scene(gs)
+    gs.add_object(line)
+    draw(gs, browser_window=True, scale=0.1)
 
+
+def test_slice():
+    plane = ((up(e3)^up(e2)^up(-e1 + 2*e2+0.3*e3))^einf).normal()
+    sphere_grid = construct_sphere_grid(8,4)
+    st = SphereTree.from_grid(sphere_grid)
+    print('Slicing',flush=True)
+    st.slice(plane)
+    gs = GanjaScene()
+    st.add_to_scene(gs, datum_only=True)
+    gs.add_object(plane)
+    draw(gs, browser_window=True, scale=0.1)
+
+
+def test_slice_sphere_grid():
+    grid = construct_sphere_grid(8,4)
+    plane = ((up(e3)^up(e2)^up(-e1 + 2*e2+0.3*e3))^einf).normal()
+    gs = GanjaScene()
+    for i in range(grid.shape[0]):
+        for j in range(grid.shape[1]):
+            for k in range(grid.shape[2]):
+                s = grid[i,j,k]
+                if sphere_beyond_plane(s, plane):
+                    gs.add_object(s)
+    gs.add_object(plane)
+    draw(gs, browser_window=True, scale=0.1)
 
 
 if __name__ == '__main__':
@@ -273,5 +371,8 @@ if __name__ == '__main__':
     #test_decimate_sphere_grid()
     #test_create_minimal_sphere_tree()
     #test_from_grid()
-    test_intersect_with_line()
+    #test_intersect_with_line()
+    #test_drill()
+    test_slice()
+    #test_slice_sphere_grid()
 
