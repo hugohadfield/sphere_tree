@@ -1,4 +1,6 @@
 import numpy as np
+import pickle
+import time
 
 from clifford.g3c import *
 from clifford.tools.g3c import *
@@ -81,6 +83,11 @@ class SphereTree:
         self.parent = parent
         self._sphere = sphere
         self.isdatum = isdatum
+
+    def apply_rotor(self, rotor):
+        self._sphere = apply_rotor(self.sphere, rotor)
+        for c in self.children:
+            c.apply_rotor(rotor)
 
     @property
     def sphere(self):
@@ -192,7 +199,6 @@ class SphereTree:
                     else:
                         i += 1
 
-
     def intersect_with_line(self, line):
         if check_sphere_line_intersect(self.sphere.value, line.value) > 0:
             if self.isleaf:
@@ -214,10 +220,21 @@ class SphereTree:
             for c in self.children:
                 c.add_to_scene(scene, datum_only=datum_only)
 
+    def save(self, filename="sphere_tree.pickle"):
+        with open(filename,"wb") as pickle_out:
+            pickle.dump(self, pickle_out)
+
+    @staticmethod
+    def load(filename="sphere_tree.pickle"):
+        with open(filename,"rb") as pickle_in:
+            st = pickle.load(pickle_in)
+        return st
+
 
 def intersect_sphere_tree_with_line(sphere_tree, line):
     result = list(flatten(sphere_tree.intersect_with_line(line)))
     return result
+
 
 def construct_sphere_grid(s_per_side, side_length, ndims=3):
     print('Constructing sphere grid')
@@ -242,6 +259,19 @@ def construct_sphere_grid(s_per_side, side_length, ndims=3):
                 sphere_grid[i,j,k] = sphere
                 scount += 1
     return sphere_grid
+
+
+def time_intersect_sphere_line():
+    S = random_sphere()
+    L = random_line()
+    ntests = 10000
+    check_sphere_line_intersect(S.value,L.value)
+    start_time = time.time()
+    for i in range(ntests):
+        check_sphere_line_intersect(S.value,L.value)
+    tot_time = time.time() - start_time
+    print('microseconds for one sphere line intersect ', 1E6*tot_time/ntests)
+    print('# of sphere - line intersections per sec: ', ntests/tot_time)
 
 
 def test_join_spheres():
@@ -317,7 +347,7 @@ def test_from_grid():
 
 def test_intersect_with_line():
     line = ((up(e2)^up(-e1 + 2*e2+0.3*e3))^einf).normal()
-    sphere_grid = construct_sphere_grid(256,4)
+    sphere_grid = construct_sphere_grid(16,4)
     st = SphereTree.from_grid(sphere_grid)
     print('Intersecting',flush=True)
     result = intersect_sphere_tree_with_line(st, line)
@@ -363,7 +393,56 @@ def test_slice_sphere_grid():
     draw(gs, browser_window=True, scale=0.1)
 
 
+def test_save_load():
+    sphere_grid = construct_sphere_grid(8,1)
+    st = SphereTree.from_grid(sphere_grid)
+    st.save()
+    loaded_tree = SphereTree.load()
+    gs = GanjaScene()
+    loaded_tree.add_to_scene(gs)
+    draw(gs,browser_window=True,scale=0.1)
+
+
+def test_drill_timing():
+    filename = 'standard_grid16.pickle'
+    try:
+        st = SphereTree.load(filename)
+    except:
+        sphere_grid = construct_sphere_grid(16,16)
+        st = SphereTree.from_grid(sphere_grid)
+        st.save(filename=filename)
+    print('Drilling',flush=True)
+    line_array = [random_line_at_origin() for i in range(100)]
+
+    start_time = time.time()
+    for line in line_array:
+        st.drill(line)
+    print('Run time: ', time.time() - start_time)
+
+    gs = GanjaScene()
+    st.add_to_scene(gs)
+    gs.add_objects(line_array, static=True)
+    draw(gs, browser_window=True, scale=0.1)
+
+
+def test_apply_rotor():
+    filename = 'standard_grid4.pickle'
+    try:
+        st = SphereTree.load(filename)
+    except:
+        sphere_grid = construct_sphere_grid(4,4)
+        st = SphereTree.from_grid(sphere_grid)
+        st.save(filename=filename)
+    gs = GanjaScene()
+    st.add_to_scene(gs)
+    RT = random_rotation_translation_rotor()
+    st.apply_rotor(RT)
+    st.add_to_scene(gs)
+    draw(gs,browser_window=True,scale=0.1)
+
+
 if __name__ == '__main__':
+    time_intersect_sphere_line()
     #test_join_spheres() 
     #test_enclosing_spheres()
     #test_in_sphere()
@@ -373,6 +452,9 @@ if __name__ == '__main__':
     #test_from_grid()
     #test_intersect_with_line()
     #test_drill()
-    test_slice()
+    #test_slice()
     #test_slice_sphere_grid()
+    #test_save_load()
+    #test_drill_timing()
+    #test_apply_rotor()
 
